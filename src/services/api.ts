@@ -1,11 +1,29 @@
 // API Service para consumir datos del backend
 import axios from 'axios';
 
+// Obtener el hostname actual (dominio o IP)
+const currentHost = window.location.hostname;
+
+// Determinar las URLs base según el hostname
+let apiBaseUrl, mariadbApiBaseUrl;
+
+if (currentHost === 'localhost' || currentHost.match(/^192\.168\.131\.\d+$/)) {
+  // Si estamos accediendo desde localhost o una IP en el rango 192.168.131.xxx
+  apiBaseUrl = `http://${currentHost}:3000/api`;
+  mariadbApiBaseUrl = `http://${currentHost}:3003/api/mariadb`;
+} else {
+  // Fallback a las URLs originales
+  apiBaseUrl = 'http://localhost:3000/api';
+  mariadbApiBaseUrl = 'http://localhost:3003/api/mariadb';
+}
+
 // URL base de la API del backend
-const API_URL = 'http://localhost:3000/api';
+const API_URL = apiBaseUrl;
 
 // URL base de la API de MariaDB
-const MARIADB_API_URL = 'http://localhost:3003/api/mariadb';
+const MARIADB_API_URL = mariadbApiBaseUrl;
+
+console.log('API URLs configuradas:', { API_URL, MARIADB_API_URL });
 
 // Interfaz para los datos del Transelevador
 export interface TranselevadorData {
