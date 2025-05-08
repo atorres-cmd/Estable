@@ -457,8 +457,15 @@ const SiloVisualization = () => {
               {pasillos.map((pasillo) => (
                 <div
                   key={`pasillo-${pasillo}`}
-                  className="flex-1 flex items-center justify-center text-xs font-medium text-operator-blue"
+                  className="flex-1 flex items-center justify-center text-xs font-bold text-operator-blue relative"
                 >
+                  {/* Círculo indicador de estado del pasillo */}
+                  {pasillo !== "EL1" && (
+                    <div 
+                      className="absolute top-1 right-[10px] w-1.5 h-1.5 rounded-full border border-white bg-green-500"
+                      title="En servicio"
+                    />
+                  )}
                   {pasillo}
                 </div>
               ))}
