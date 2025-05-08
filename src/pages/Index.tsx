@@ -4,6 +4,7 @@ import HeaderOperator from "../components/HeaderOperator";
 import TableKPI from "../components/TableKPI";
 import SiloVisualization from "../components/SiloVisualization";
 import AlarmPanel from "../components/AlarmPanel";
+import PasillosStatusCard from "../components/PasillosStatusCard";
 
 const Index = () => {
   return (
@@ -18,6 +19,9 @@ const Index = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="lg:col-span-2">
               <SiloVisualization />
+            </div>
+            <div className="lg:col-span-2">
+              <PasillosStatusCard />
             </div>
             <div>
               <AlarmPanel />

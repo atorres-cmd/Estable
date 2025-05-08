@@ -6,6 +6,8 @@ import SiloComponentVisualization from "./SiloComponentVisualization";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { getTLV1StatusFromMariaDB, getTLV2StatusFromMariaDB, getPTStatusFromMariaDB, TLV1StatusData, TLV2StatusData, PTStatusData } from '../services/api';
+import { getMesasEntradaStatusFromMariaDB, MesasEntradaStatusData } from '../services/mesasEntradaApi';
+import { getMesasSalidaStatusFromMariaDB, MesasSalidaStatusData } from '../services/mesasSalidaApi';
 
 // Tipos para los componentes del silo
 type ComponentStatus = "active" | "inactive" | "error" | "moving";
@@ -32,18 +34,20 @@ const Z_MAX = 2;
 const pasillos = Array.from({ length: SILO_PASILLOS - 1 }, (_, i) => `P${i + 1}`).concat(['EL1']);
 
 const SILO_LEGENDS = [
-  { color: "bg-green-500", label: "Activo" },
-  { color: "bg-blue-500", label: "En movimiento" },
+  { color: "bg-green-500", label: "Activo / Mesa Libre" },
+  { color: "bg-blue-500", label: "En movimiento / Mesa Ocupada" },
   { color: "bg-gray-400", label: "Inactivo" },
-  { color: "bg-red-500", label: "Error" },
+  { color: "bg-red-500", label: "Error / Mesa en Avería" },
 ];
 
 const SiloVisualization = () => {
   const navigate = useNavigate();
-  // Estado para almacenar los datos de los transelevadores y el puente transferidor
+  // Estado para almacenar los datos de los transelevadores, el puente transferidor, las mesas de entrada y las mesas de salida
   const [tlv1Data, setTLV1Data] = useState<TLV1StatusData | null>(null);
   const [tlv2Data, setTLV2Data] = useState<TLV2StatusData | null>(null);
   const [ptData, setPTData] = useState<PTStatusData | null>(null);
+  const [mesasEntradaData, setMesasEntradaData] = useState<MesasEntradaStatusData | null>(null);
+  const [mesasSalidaData, setMesasSalidaData] = useState<MesasSalidaStatusData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -52,24 +56,31 @@ const SiloVisualization = () => {
   const lastT2UpdateTime = useRef(0);
   const t2UpdateInterval = 1000; // Actualizar T2 como máximo una vez por segundo
 
-  // Cargar datos de TLV1, TLV2 y PT desde MariaDB
+  // Cargar datos de TLV1, TLV2, PT, Mesas de Entrada y Mesas de Salida desde MariaDB
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Obtener datos de TLV1, TLV2 y PT en paralelo
-        const [tlv1Result, tlv2Result, ptResult] = await Promise.all([
+        // Obtener datos de TLV1, TLV2, PT, Mesas de Entrada y Mesas de Salida en paralelo
+        const [tlv1Result, tlv2Result, ptResult, mesasEntradaResult, mesasSalidaResult] = await Promise.all([
           getTLV1StatusFromMariaDB(),
           getTLV2StatusFromMariaDB(),
-          getPTStatusFromMariaDB()
+          getPTStatusFromMariaDB(),
+          getMesasEntradaStatusFromMariaDB(),
+          getMesasSalidaStatusFromMariaDB()
         ]);
         
         setTLV1Data(tlv1Result);
         setTLV2Data(tlv2Result);
         setPTData(ptResult);
+        setMesasEntradaData(mesasEntradaResult);
+        setMesasSalidaData(mesasSalidaResult);
+        setLoading(false);
         setError(null);
         
         console.log('Datos del Puente Transferidor:', ptResult);
+        console.log('Datos de las Mesas de Entrada:', mesasEntradaResult);
+        console.log('Datos de las Mesas de Salida:', mesasSalidaResult);
 
         // Procesar los datos de los transelevadores y del puente transferidor
         
@@ -298,35 +309,106 @@ const SiloVisualization = () => {
     }
   };
   
-  // Función para determinar el color de fondo del transportador según su estado
-  const getTransportadorStatusColor = (pasillo: string, index: number) => {
-    // Usamos una combinación de pasillo e índice para generar un estado pseudo-aleatorio pero consistente
+  // Función para determinar el color de fondo de la mesa de entrada según su estado
+  const getMesaEntradaStatusColor = (pasillo: string) => {
+    if (!mesasEntradaData) return "bg-gray-400"; // Si no hay datos, mostrar en gris
+    
     const pasilloNum = parseInt(pasillo.substring(1));
-    const seed = pasilloNum * 10 + index;
+    const mesaKey = `pep${pasilloNum}` as keyof MesasEntradaStatusData;
+    const estado = mesasEntradaData[mesaKey];
     
-    // Distribuimos los estados: 60% OK (verde), 30% lleno (azul), 10% error (rojo)
-    const rand = (seed * 13) % 100;
-    
-    if (rand < 10) {
-      return "bg-red-500"; // Error
-    } else if (rand < 40) {
-      return "bg-blue-500"; // Lleno
-    } else {
-      return "bg-green-500"; // OK
+    // Estado 0: Libre (verde), Estado 1: Ocupado (azul), Estado 2: Avería (rojo)
+    switch (estado) {
+      case 0:
+        return "bg-green-500"; // Libre
+      case 1:
+        return "bg-blue-500";  // Ocupado
+      case 2:
+        return "bg-red-500";   // Avería
+      default:
+        return "bg-gray-400";  // Estado desconocido
     }
   };
   
-  // Función para obtener el texto descriptivo del estado del transportador
-  const getTransportadorStatusText = (pasillo: string, index: number) => {
-    const color = getTransportadorStatusColor(pasillo, index);
+  // Función para obtener el texto descriptivo del estado de la mesa de entrada
+  const getMesaEntradaStatusText = (pasillo: string) => {
+    if (!mesasEntradaData) return "Estado desconocido";
     
-    if (color === "bg-red-500") {
-      return "Error - Transportador no disponible";
-    } else if (color === "bg-blue-500") {
-      return "Lleno - Transportador a máxima capacidad";
-    } else {
-      return "OK - Transportador operativo";
+    const pasilloNum = parseInt(pasillo.substring(1));
+    const mesaKey = `pep${pasilloNum}` as keyof MesasEntradaStatusData;
+    const estado = mesasEntradaData[mesaKey];
+    
+    switch (estado) {
+      case 0:
+        return "Libre - Mesa de entrada disponible";
+      case 1:
+        return "Ocupado - Mesa de entrada en uso";
+      case 2:
+        return "Avería - Mesa de entrada no disponible";
+      default:
+        return "Estado desconocido";
     }
+  };
+  
+  // Función para determinar el color de fondo de la mesa de salida según su estado
+  const getMesaSalidaStatusColor = (pasillo: string) => {
+    if (!mesasSalidaData) return "bg-gray-400"; // Si no hay datos, mostrar en gris
+    
+    const pasilloNum = parseInt(pasillo.substring(1));
+    const mesaKey = `psp${pasilloNum}` as keyof MesasSalidaStatusData;
+    const estado = mesasSalidaData[mesaKey];
+    
+    // Estado 0: Libre (verde), Estado 1: Ocupado (azul), Estado 2: Avería (rojo)
+    switch (estado) {
+      case 0:
+        return "bg-green-500"; // Libre
+      case 1:
+        return "bg-blue-500";  // Ocupado
+      case 2:
+        return "bg-red-500";   // Avería
+      default:
+        return "bg-gray-400";  // Estado desconocido
+    }
+  };
+  
+  // Función para obtener el texto descriptivo del estado de la mesa de salida
+  const getMesaSalidaStatusText = (pasillo: string) => {
+    if (!mesasSalidaData) return "Estado desconocido";
+    
+    const pasilloNum = parseInt(pasillo.substring(1));
+    const mesaKey = `psp${pasilloNum}` as keyof MesasSalidaStatusData;
+    const estado = mesasSalidaData[mesaKey];
+    
+    switch (estado) {
+      case 0:
+        return "Libre - Mesa de salida disponible";
+      case 1:
+        return "Ocupado - Mesa de salida en uso";
+      case 2:
+        return "Avería - Mesa de salida no disponible";
+      default:
+        return "Estado desconocido";
+    }
+  };
+  
+  // Función para determinar el color de fondo del transportador según su estado (para compatibilidad)
+  const getTransportadorStatusColor = (pasillo: string, index: number) => {
+    // Si es un índice impar (1, 3, 5...), es una mesa de entrada
+    if (index % 2 === 1) {
+      return getMesaEntradaStatusColor(pasillo);
+    }
+    // Si es un índice par (2, 4, 6...), es una mesa de salida
+    return getMesaSalidaStatusColor(pasillo);
+  };
+  
+  // Función para obtener el texto descriptivo del estado del transportador (para compatibilidad)
+  const getTransportadorStatusText = (pasillo: string, index: number) => {
+    // Si es un índice impar (1, 3, 5...), es una mesa de entrada
+    if (index % 2 === 1) {
+      return getMesaEntradaStatusText(pasillo);
+    }
+    // Si es un índice par (2, 4, 6...), es una mesa de salida
+    return getMesaSalidaStatusText(pasillo);
   };
 
   // Permite actualizar la posición arrastrando el componente
@@ -388,20 +470,39 @@ const SiloVisualization = () => {
                 <div key={`transportadores-${pasillo}`} className="flex-1 flex items-center justify-center relative">
                   {pasillo !== "EL1" && (
                     <div className="flex space-x-2">
-                      {/* Primer transportador - numerado secuencialmente desde 37 */}
-                      <div 
-                        className={`w-3 h-3 rounded-full flex items-center justify-center ${getTransportadorStatusColor(pasillo, 1)}`}
-                        title={getTransportadorStatusText(pasillo, 1)}
-                      >
-                        <span className="text-[5px] font-bold text-white">{37 + (parseInt(pasillo.substring(1)) - 1) * 2}</span>
-                      </div>
-                      {/* Segundo transportador - numerado secuencialmente desde 38 */}
-                      <div 
-                        className={`w-3 h-3 rounded-full flex items-center justify-center ${getTransportadorStatusColor(pasillo, 2)}`}
-                        title={getTransportadorStatusText(pasillo, 2)}
-                      >
-                        <span className="text-[5px] font-bold text-white">{38 + (parseInt(pasillo.substring(1)) - 1) * 2}</span>
-                      </div>
+                      {/* Mesa de entrada (izquierda) - con colores según estado: verde(0), azul(1), rojo(2) */}
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <div 
+                            className={`w-3 h-3 rounded-full flex items-center justify-center ${getMesaEntradaStatusColor(pasillo)} transition-all duration-300 ease-in-out ${mesasEntradaData && mesasEntradaData[`pep${parseInt(pasillo.substring(1))}` as keyof MesasEntradaStatusData] === 1 ? 'animate-pulse' : mesasEntradaData && mesasEntradaData[`pep${parseInt(pasillo.substring(1))}` as keyof MesasEntradaStatusData] === 2 ? 'animate-bounce' : ''}`}
+                          >
+                            <span className="text-[5px] font-bold text-white">{37 + (parseInt(pasillo.substring(1)) - 1) * 2}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div>
+                            <div className="font-semibold">Mesa de Entrada P{parseInt(pasillo.substring(1))}</div>
+                            <div>{getMesaEntradaStatusText(pasillo)}</div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                      
+                      {/* Mesa de salida (derecha) - con colores según estado: verde(0), azul(1), rojo(2) */}
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <div 
+                            className={`w-3 h-3 rounded-full flex items-center justify-center ${getMesaSalidaStatusColor(pasillo)} transition-all duration-300 ease-in-out ${mesasSalidaData && mesasSalidaData[`psp${parseInt(pasillo.substring(1))}` as keyof MesasSalidaStatusData] === 1 ? 'animate-pulse' : mesasSalidaData && mesasSalidaData[`psp${parseInt(pasillo.substring(1))}` as keyof MesasSalidaStatusData] === 2 ? 'animate-bounce' : ''}`}
+                          >
+                            <span className="text-[5px] font-bold text-white">{38 + (parseInt(pasillo.substring(1)) - 1) * 2}</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div>
+                            <div className="font-semibold">Mesa de Salida P{parseInt(pasillo.substring(1))}</div>
+                            <div>{getMesaSalidaStatusText(pasillo)}</div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   )}
                 </div>
@@ -512,6 +613,11 @@ const SiloVisualization = () => {
       </div>
       <div className="mt-4">
         <SiloComponentLegend legends={SILO_LEGENDS} />
+        <div className="mt-2 text-xs text-gray-600">
+          <p><span className="font-semibold">Mesas de Entrada:</span> Los círculos de la izquierda debajo de cada pasillo muestran el estado de las mesas de entrada.</p>
+          <p><span className="font-semibold">Mesas de Salida:</span> Los círculos de la derecha debajo de cada pasillo muestran el estado de las mesas de salida.</p>
+          <p>Verde = Libre (0), Azul = Ocupada (1), Rojo = Avería (2)</p>
+        </div>
       </div>
       <div className="mt-6">
         <SiloComponentInfoGroup

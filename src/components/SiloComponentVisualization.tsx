@@ -372,7 +372,7 @@ const SiloComponentVisualization: FC<SiloComponentVisualizationProps> = ({
                   top: absolutePosition.top,
                   transform: absolutePosition.transform || "translate(-50%, -50%)",
                   zIndex: component.type === "puente" || component.type === "transferidor" ? 30 : 10,
-                  height: component.type === "puente" ? "22px" : "auto",
+                  height: component.type === "puente" ? "22px" : "auto"
                 }}
                 draggable
                 onDragStart={(e) => handleDragStart(e, component)}
@@ -386,13 +386,25 @@ const SiloComponentVisualization: FC<SiloComponentVisualizationProps> = ({
                       `absolute -top-2 -right-3 w-3 h-3 rounded-full border border-white shadow-sm ${statusColor}`
                     }
                   />
+                  
+                  {/* Mostrar etiquetas para transelevadores a la izquierda del icono */}
+                  {component.type === "transelevador" && (
+                    <Link 
+                      to={component.id === "trans1" ? "/transelevador/t1" : "/transelevador/t2"}
+                      className="no-underline absolute"
+                      style={{ left: '-15px', top: '50%', transform: 'translateY(-50%)' }}
+                    >
+                      <span className="text-xs font-semibold text-gray-700 bg-white/80 rounded px-1 shadow-sm hover:bg-gray-200 cursor-pointer">
+                        {component.id === "trans1" ? "T1" : "T2"}
+                      </span>
+                    </Link>
+                  )}
                 </div>
-                {/* Mostrar etiquetas para transelevadores, carro transferidor y puente */}
-                {(component.type === "transelevador" || component.type === "transferidor" || component.type === "puente" || component.type === "elevador") && (
+                
+                {/* Mostrar etiquetas para carro transferidor, puente y elevador debajo */}
+                {(component.type === "transferidor" || component.type === "puente" || component.type === "elevador") && (
                   <Link 
                     to={
-                      component.id === "trans1" ? "/transelevador/t1" : 
-                      component.id === "trans2" ? "/transelevador/t2" : 
                       component.id === "puente" ? "/puente" :
                       component.id === "transferidor" ? "/ct" :
                       component.id === "elevador" ? "/elevador" :
@@ -401,9 +413,7 @@ const SiloComponentVisualization: FC<SiloComponentVisualizationProps> = ({
                     className="no-underline"
                   >
                     <span className="text-xs font-semibold text-gray-700 bg-white/80 rounded px-1 mt-1 shadow-sm hover:bg-gray-200 cursor-pointer">
-                      {component.type === "transelevador"
-                        ? (component.id === "trans1" ? "T1" : component.id === "trans2" ? "T2" : `T${component.id.slice(-1)}`)
-                        : component.type === "transferidor"
+                      {component.type === "transferidor"
                         ? "CT"
                         : component.type === "elevador"
                         ? "EL"
