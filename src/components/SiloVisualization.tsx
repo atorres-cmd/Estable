@@ -78,7 +78,7 @@ const SiloVisualization = () => {
           if (comp.id === "trans1" && tlv1Result) {
             // Limitar los valores a rangos válidos para T1
             const pasillo = Math.max(1, Math.min(12, tlv1Result.pasillo_actual));
-            const altura = Math.max(0, Math.min(50, tlv1Result.x_actual)); // Limitamos a 50 como máximo
+            const altura = Math.max(0, Math.min(60, tlv1Result.x_actual)); // Limitamos a 60 como máximo
             const pala = Math.max(1, Math.min(2, tlv1Result.z_actual));
             
             return {
@@ -93,7 +93,7 @@ const SiloVisualization = () => {
           } else if (comp.id === "trans2" && tlv2Result) {
             // Limitar los valores a rangos válidos para T2
             const pasillo = Math.max(1, Math.min(12, tlv2Result.pasillo_actual));
-            const altura = Math.max(0, Math.min(50, tlv2Result.x_actual)); // Limitamos a 50 como máximo
+            const altura = Math.max(0, Math.min(60, tlv2Result.x_actual)); // Limitamos a 60 como máximo
             const pala = Math.max(1, Math.min(2, tlv2Result.z_actual));
             
             // Para T2, usamos directamente los valores de MariaDB, ignorando la simulación
@@ -363,6 +363,9 @@ const SiloVisualization = () => {
             onUpdatePosition={handleUpdatePosition}
             pauseSimulation={() => setSimulationPaused(true)}
             resumeSimulation={() => setSimulationPaused(false)}
+            tlv1Data={tlv1Data}
+            tlv2Data={tlv2Data}
+            ptData={ptData}
           />
           
           {/* Área inferior con etiquetas de pasillos, transportadores y carro transferidor */}
@@ -515,6 +518,7 @@ const SiloVisualization = () => {
           components={components}
           getStatusColor={getStatusColor}
           tlv1Data={tlv1Data}
+          tlv2Data={tlv2Data}
         />
       </div>
     </div>

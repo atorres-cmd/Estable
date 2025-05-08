@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/toolti
 import { Forklift, Truck, Warehouse, Layers } from "lucide-react";
 import CustomSvgIcon from "./CustomSvgIcon";
 import { Link } from "react-router-dom";
+import { TLV1StatusData, TLV2StatusData, PTStatusData } from "../services/api";
 
 type ComponentStatus = "active" | "inactive" | "error" | "moving";
 
@@ -25,6 +26,9 @@ interface SiloComponentVisualizationProps {
   onUpdatePosition: (id: string, newPosition: { x: number; y: number }) => void;
   pauseSimulation: () => void;
   resumeSimulation: () => void;
+  tlv1Data?: TLV1StatusData | null;
+  tlv2Data?: TLV2StatusData | null;
+  ptData?: PTStatusData | null;
 }
 
 const PASILLOS = 13; // Aumentado a 13 para incluir el pasillo P13 para el Elevador
@@ -36,6 +40,9 @@ const SiloComponentVisualization: FC<SiloComponentVisualizationProps> = ({
   onUpdatePosition,
   pauseSimulation,
   resumeSimulation,
+  tlv1Data,
+  tlv2Data,
+  ptData,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -185,7 +192,7 @@ const SiloComponentVisualization: FC<SiloComponentVisualizationProps> = ({
       
       // La coordenada X en los datos de MariaDB va de 0 (abajo) a 59 (arriba)
       // Necesitamos invertir la escala para que coincida con la visualización
-      const MAX_ALTURA = 59;
+      const MAX_ALTURA = 60;
       
       // Asegurarse de que la altura esté dentro del rango válido
       const altura = Math.min(MAX_ALTURA, Math.max(0, component.position.x));
@@ -417,12 +424,45 @@ const SiloComponentVisualization: FC<SiloComponentVisualizationProps> = ({
                 </div>
                 {component.type === "transelevador" && (
                   <div className="space-y-1 mt-1">
-                    <div>Pasillo (Y): <span className="font-mono">{component.position.y}</span></div>
-                    <div>Altura (X): <span className="font-mono">{component.position.x}</span></div>
-                    <div>Palas (Z): <span className="font-mono">{component.position.z}</span></div>
+                    <div>Pasillo: <span className="font-mono">
+                      {component.id === "trans1" && tlv1Data 
+                        ? tlv1Data.pasillo_actual 
+                        : component.id === "trans2" && tlv2Data 
+                          ? tlv2Data.pasillo_actual 
+                          : component.position.y}
+                    </span></div>
+                    <div>X: <span className="font-mono">
+                      {component.id === "trans1" && tlv1Data 
+                        ? tlv1Data.x_actual 
+                        : component.id === "trans2" && tlv2Data 
+                          ? tlv2Data.x_actual 
+                          : component.position.x}
+                    </span></div>
+                    <div>Y: <span className="font-mono">
+                      {component.id === "trans1" && tlv1Data 
+                        ? tlv1Data.y_actual 
+                        : component.id === "trans2" && tlv2Data 
+                          ? tlv2Data.y_actual 
+                          : component.position.y}
+                    </span></div>
+                    <div>Z: <span className="font-mono">
+                      {component.id === "trans1" && tlv1Data 
+                        ? tlv1Data.z_actual 
+                        : component.id === "trans2" && tlv2Data 
+                          ? tlv2Data.z_actual 
+                          : component.position.z}
+                    </span></div>
                   </div>
                 )}
-                {component.type !== "transelevador" && (
+                {component.type === "puente" && ptData && (
+                  <div className="space-y-1 mt-1">
+                    <div>Estado: <span className="font-mono">{ptData.estado}</span></div>
+                    <div>Ocupación: <span className="font-mono">{ptData.ocupacion}</span></div>
+                    <div>Situación: <span className="font-mono">{ptData.situacion}</span></div>
+                    <div>Posición: <span className="font-mono">{ptData.posicion}</span></div>
+                  </div>
+                )}
+                {component.type !== "transelevador" && component.type !== "puente" && (
                   <div className="space-y-1 mt-1">
                     <div>X: <span className="font-mono">{component.position.x}</span></div>
                     <div>Y: <span className="font-mono">{component.position.y}</span></div>

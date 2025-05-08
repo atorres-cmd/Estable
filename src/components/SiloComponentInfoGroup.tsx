@@ -1,6 +1,6 @@
 
 import { FC } from "react";
-import { TLV1StatusData } from "../services/api";
+import { TLV1StatusData, TLV2StatusData } from "../services/api";
 
 type ComponentStatus = "active" | "inactive" | "error" | "moving";
 
@@ -21,12 +21,14 @@ interface SiloComponentInfoGroupProps {
   components: SiloComponent[];
   getStatusColor: (status: ComponentStatus) => string;
   tlv1Data?: TLV1StatusData | null;
+  tlv2Data?: TLV2StatusData | null;
 }
 
 const SiloComponentInfoGroup: FC<SiloComponentInfoGroupProps> = ({
   components,
   getStatusColor,
   tlv1Data,
+  tlv2Data,
 }) => {
   return (
     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -72,8 +74,12 @@ const SiloComponentInfoGroup: FC<SiloComponentInfoGroupProps> = ({
                       Y
                     </span>
                     <span className="text-base font-bold text-gray-700">
-                      {/* Para el transelevador 1, usamos los datos de TLV1 si están disponibles */}
-                      {component.id === "trans1" && tlv1Data ? tlv1Data.y_actual : component.position.y}
+                      {/* Para los transelevadores, usamos los datos de MariaDB si están disponibles */}
+                      {component.id === "trans1" && tlv1Data 
+                        ? tlv1Data.y_actual 
+                        : component.id === "trans2" && tlv2Data 
+                          ? tlv2Data.y_actual 
+                          : component.position.y}
                     </span>
                   </div>
                   <div className="flex flex-col items-center">
@@ -81,7 +87,12 @@ const SiloComponentInfoGroup: FC<SiloComponentInfoGroupProps> = ({
                       Z
                     </span>
                     <span className="text-base font-bold text-gray-700">
-                      {component.position.z}
+                      {/* Para los transelevadores, usamos los datos de MariaDB si están disponibles */}
+                      {component.id === "trans1" && tlv1Data 
+                        ? tlv1Data.z_actual 
+                        : component.id === "trans2" && tlv2Data 
+                          ? tlv2Data.z_actual 
+                          : component.position.z}
                     </span>
                   </div>
                 </div>
