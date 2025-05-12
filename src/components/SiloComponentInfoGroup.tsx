@@ -1,6 +1,6 @@
 
 import { FC } from "react";
-import { TLV1StatusData, TLV2StatusData } from "../services/api";
+import { TLV1StatusData, TLV2StatusData, CTStatusData, PTStatusData } from "../services/api";
 
 type ComponentStatus = "active" | "inactive" | "error" | "moving";
 
@@ -22,6 +22,8 @@ interface SiloComponentInfoGroupProps {
   getStatusColor: (status: ComponentStatus) => string;
   tlv1Data?: TLV1StatusData | null;
   tlv2Data?: TLV2StatusData | null;
+  ctData?: CTStatusData | null;
+  ptData?: PTStatusData | null;
 }
 
 const SiloComponentInfoGroup: FC<SiloComponentInfoGroupProps> = ({
@@ -29,6 +31,8 @@ const SiloComponentInfoGroup: FC<SiloComponentInfoGroupProps> = ({
   getStatusColor,
   tlv1Data,
   tlv2Data,
+  ctData,
+  ptData,
 }) => {
   return (
     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -100,14 +104,61 @@ const SiloComponentInfoGroup: FC<SiloComponentInfoGroupProps> = ({
             ) : (
               <>
                 {component.type === "transferidor" && (
-                  <p>
-                    Posición: Pasillo {component.position.x}
-                  </p>
+                  <div className="mt-3">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-operator-blue">Pasillo Actual:</span>
+                        <span className="text-base font-bold text-gray-700">
+                          {ctData ? ctData.PasActual : component.position.y}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-operator-blue">Pasillo Destino:</span>
+                        <span className="text-base font-bold text-gray-700">
+                          {ctData ? ctData.PasDestino : '-'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-operator-blue">Ciclo Trabajo:</span>
+                        <span className="text-base font-bold text-gray-700">
+                          {ctData ? ctData.CicloTrabajo : '-'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-operator-blue">Modo:</span>
+                        <span className="text-base font-bold text-gray-700">
+                          {ctData ? (ctData.St_Auto === 1 ? 'Automático' : 
+                                   ctData.St_Semi === 1 ? 'Semi-Auto' : 
+                                   ctData.St_Manual === 1 ? 'Manual' : 'Desconocido') : '-'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 )}
                 {component.type === "puente" && (
-                  <p>
-                    Posición: Pasillo {component.position.y}
-                  </p>
+                  <div className="mt-3">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-operator-blue">Posición:</span>
+                        <span className="text-base font-bold text-gray-700">
+                          Pasillo {ptData ? ptData.posicion : component.position.y}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-operator-blue">Ocupación:</span>
+                        <span className="text-base font-bold text-gray-700">
+                          {ptData ? (ptData.ocupacion === 1 ? 'Ocupado' : 'Libre') : '-'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-operator-blue">Avería:</span>
+                        <span className="text-base font-bold text-gray-700">
+                          {ptData ? (ptData.estado === 1 ? 'Sí' : 'No') : '-'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 )}
                 {component.type === "elevador" && (
                   <p>

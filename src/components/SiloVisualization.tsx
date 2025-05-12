@@ -5,7 +5,7 @@ import SiloComponentLegend from "./SiloComponentLegend";
 import SiloComponentVisualization from "./SiloComponentVisualization";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { useNavigate } from "react-router-dom";
-import { getTLV1StatusFromMariaDB, getTLV2StatusFromMariaDB, getPTStatusFromMariaDB, TLV1StatusData, TLV2StatusData, PTStatusData } from '../services/api';
+import { getTLV1StatusFromMariaDB, getTLV2StatusFromMariaDB, getPTStatusFromMariaDB, getCTStatusFromMariaDB, TLV1StatusData, TLV2StatusData, PTStatusData, CTStatusData } from '../services/api';
 import { getMesasEntradaStatusFromMariaDB, MesasEntradaStatusData } from '../services/mesasEntradaApi';
 import { getMesasSalidaStatusFromMariaDB, MesasSalidaStatusData } from '../services/mesasSalidaApi';
 
@@ -46,6 +46,7 @@ const SiloVisualization = () => {
   const [tlv1Data, setTLV1Data] = useState<TLV1StatusData | null>(null);
   const [tlv2Data, setTLV2Data] = useState<TLV2StatusData | null>(null);
   const [ptData, setPTData] = useState<PTStatusData | null>(null);
+  const [ctData, setCTData] = useState<CTStatusData | null>(null);
   const [mesasEntradaData, setMesasEntradaData] = useState<MesasEntradaStatusData | null>(null);
   const [mesasSalidaData, setMesasSalidaData] = useState<MesasSalidaStatusData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,11 +62,12 @@ const SiloVisualization = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Obtener datos de TLV1, TLV2, PT, Mesas de Entrada y Mesas de Salida en paralelo
-        const [tlv1Result, tlv2Result, ptResult, mesasEntradaResult, mesasSalidaResult] = await Promise.all([
+        // Obtener datos de TLV1, TLV2, PT, CT, Mesas de Entrada y Mesas de Salida en paralelo
+        const [tlv1Result, tlv2Result, ptResult, ctResult, mesasEntradaResult, mesasSalidaResult] = await Promise.all([
           getTLV1StatusFromMariaDB(),
           getTLV2StatusFromMariaDB(),
           getPTStatusFromMariaDB(),
+          getCTStatusFromMariaDB(),
           getMesasEntradaStatusFromMariaDB(),
           getMesasSalidaStatusFromMariaDB()
         ]);
@@ -73,12 +75,14 @@ const SiloVisualization = () => {
         setTLV1Data(tlv1Result);
         setTLV2Data(tlv2Result);
         setPTData(ptResult);
+        setCTData(ctResult);
         setMesasEntradaData(mesasEntradaResult);
         setMesasSalidaData(mesasSalidaResult);
         setLoading(false);
         setError(null);
         
         console.log('Datos del Puente Transferidor:', ptResult);
+        console.log('Datos del Carro Transferidor:', ctResult);
         console.log('Datos de las Mesas de Entrada:', mesasEntradaResult);
         console.log('Datos de las Mesas de Salida:', mesasSalidaResult);
 
@@ -137,6 +141,22 @@ const SiloVisualization = () => {
                 y: pasillo // Usar el valor de posicion de la tabla PT_Status
               }
             };
+          } else if (comp.id === "transferidor" && ctResult) {
+            // Tomar el valor directamente de la tabla CT_Status, del campo PasActual
+            // Permitimos hasta la posición 13 (elevador)
+            const pasillo = Math.max(1, Math.min(13, ctResult.PasActual));
+            
+            console.log(`Actualizando Carro Transferidor desde MariaDB: Pasillo ${pasillo}`);
+            
+            return {
+              ...comp,
+              status: ctResult.StDefecto === 1 ? "error" : 
+                     ctResult.StConectado === 1 ? "active" : "inactive",
+              position: {
+                x: 0, // El carro siempre está en x=0 en la visualización
+                y: pasillo // Usar el valor de PasActual de la tabla CT_Status
+              }
+            };
           }
           return comp;
         }));
@@ -155,15 +175,16 @@ const SiloVisualization = () => {
     
     // Limpiar intervalo al desmontar el componente
     return () => clearInterval(intervalId);
-  }, []); // Mantenemos las dependencias vacías para que solo se ejecute al montar el componente
+  }, []); // Se ejecuta solo al montar el componente
   
   // Referencia para almacenar la última posición válida del puente
   const lastValidPuentePosition = useRef(1); // Inicializamos con 1 como valor por defecto
 
-  // Este useEffect se ejecuta cuando cambian los datos de los transelevadores o del puente
+  // Este useEffect se ejecuta cuando cambian los datos de los transelevadores, del puente o del carro transferidor
   useEffect(() => {
-    if (tlv1Data || tlv2Data || ptData) {
+    if (tlv1Data || tlv2Data || ptData || ctData) {
       console.log('Datos del PT recibidos:', ptData);
+      console.log('Datos del CT recibidos:', ctData);
       setComponents(prev => prev.map(comp => {
         // Actualizar el puente transferidor con los datos de PT_Status
         if (comp.id === "puente" && ptData) {
@@ -191,7 +212,7 @@ const SiloVisualization = () => {
         return comp;
       }));
     }
-  }, [tlv1Data, tlv2Data, ptData]);
+  }, [tlv1Data, tlv2Data, ptData, ctData]);
 
   const [components, setComponents] = useState<SiloComponent[]>([
     {
@@ -213,7 +234,7 @@ const SiloVisualization = () => {
       name: "Carro Transferidor",
       type: "transferidor",
       status: "active",
-      position: { x: 6, y: 0 }, // Posicionado en el pasillo 6
+      position: { x: 0, y: 5 }, // Posicionado en el pasillo 5 (valor inicial)
     },
     {
       id: "puente",
@@ -523,8 +544,8 @@ const SiloVisualization = () => {
                 .filter(c => c.type === "transferidor")
                 .map(component => {
                   // Ajustamos manualmente con un desplazamiento adicional hacia la izquierda
-                  // Aumentamos el desplazamiento de -1.5 a -2.5 para centrar mejor
-                  const xPerc = ((component.position.x - 0.5) * (100 / SILO_PASILLOS)) - 2.5;
+                  // Usamos component.position.y para posicionar el CT según el pasillo
+                  const xPerc = ((component.position.y - 0.5) * (100 / SILO_PASILLOS)) - 2.5;
                   const statusColor = getStatusColor(component.status, component.type);
                   
                   return (
@@ -566,7 +587,7 @@ const SiloVisualization = () => {
                                 <rect x="70" y="17" width="10" height="6" fill="#88CCFF" stroke="#000000" strokeWidth="0.5" /> {/* Ventana */}
                               </svg>
                             </div>
-                            <span className="absolute -top-2 -right-3 w-3 h-3 rounded-full border border-white shadow-sm bg-green-500" />
+                            <span className="absolute -bottom-2 -right-3 w-3 h-3 rounded-full border border-white shadow-sm bg-green-500" />
                           </div>
                           <span className="text-xs font-semibold text-gray-700 bg-white/80 rounded px-1 mt-1 shadow-sm hover:bg-gray-200">CT</span>
                         </div>
@@ -632,6 +653,8 @@ const SiloVisualization = () => {
           getStatusColor={getStatusColor}
           tlv1Data={tlv1Data}
           tlv2Data={tlv2Data}
+          ctData={ctData}
+          ptData={ptData}
         />
       </div>
     </div>

@@ -64,7 +64,7 @@ export interface TLV1StatusData {
 }
 
 // Interfaz para los datos de TLV2_Status de MariaDB (misma estructura que TLV1)
-export interface TLV2StatusData extends TLV1StatusData {}
+export type TLV2StatusData = TLV1StatusData;
 
 // Interfaz para los datos de PT_Status de MariaDB
 export interface PTStatusData {
@@ -74,6 +74,25 @@ export interface PTStatusData {
   situacion: number;
   posicion: number;
   timestamp: string;
+}
+
+// Interfaz para los datos de CT_Status de MariaDB
+export interface CTStatusData {
+  id: number;
+  timestamp: string;
+  StConectado: number;
+  StDefecto: number;
+  St_Auto: number;
+  St_Semi: number;
+  St_Manual: number;
+  St_Puerta: number;
+  St_Datos: number;
+  MatEntrada: number;
+  MatSalida: number;
+  PasDestino: number;
+  CicloTrabajo: number;
+  PasActual: number;
+  St_Carro: number;
 }
 
 // Servicio para obtener datos del Transelevador 1
@@ -342,6 +361,56 @@ export const syncPTFromPLC = async (): Promise<PTStatusData> => {
     }
   } catch (error) {
     console.error('Error al sincronizar datos del Puente Transferidor desde el PLC:', error);
+    throw error;
+  }
+};
+
+// Servicio para obtener datos del Carro Transferidor (CT) desde MariaDB
+export const getCTStatusFromMariaDB = async (): Promise<CTStatusData> => {
+  try {
+    const response = await axios.get(`${MARIADB_API_URL}/db112/status`);
+    console.log('Datos del CT obtenidos desde MariaDB API:', response.data);
+    
+    // La API devuelve { success: true, data: {...} }
+    if (response.data && response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error al obtener datos del Carro Transferidor:', error);
+    
+    // Datos de ejemplo en caso de error (para desarrollo)
+    return {
+      id: 1,
+      timestamp: new Date().toISOString(),
+      StConectado: 1,
+      StDefecto: 0,
+      St_Auto: 1,
+      St_Semi: 0,
+      St_Manual: 0,
+      St_Puerta: 0,
+      St_Datos: 1,
+      MatEntrada: 0,
+      MatSalida: 0,
+      PasDestino: 6,
+      CicloTrabajo: 0,
+      PasActual: 4,
+      St_Carro: 1
+    };
+  }
+};
+
+// Servicio para sincronizar manualmente los datos del Carro Transferidor (CT) desde el PLC
+export const syncCTFromPLC = async (): Promise<CTStatusData> => {
+  try {
+    const response = await axios.post(`${MARIADB_API_URL}/db112/sync`);
+    console.log('Sincronización del CT desde MariaDB API:', response.data);
+    
+    // Después de sincronizar, obtener los datos actualizados
+    return await getCTStatusFromMariaDB();
+  } catch (error) {
+    console.error('Error al sincronizar datos del Carro Transferidor desde el PLC:', error);
     throw error;
   }
 };

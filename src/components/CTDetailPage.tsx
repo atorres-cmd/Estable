@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getCTStatusFromMariaDB, syncCTFromPLC, CTStatusData } from '../services/api';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -50,7 +51,53 @@ const alarmasEjemplo: Alarma[] = [
 
 const CTDetailPage = () => {
   const [activeTab, setActiveTab] = useState('general');
+  const [ctData, setCTData] = useState<CTStatusData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const navigate = useNavigate();
+  
+  // Función para cargar los datos del CT
+  const loadCTData = async () => {
+    try {
+      setLoading(true);
+      const data = await getCTStatusFromMariaDB();
+      setCTData(data);
+      setLastUpdate(new Date());
+      setError(null);
+    } catch (err) {
+      console.error('Error al cargar datos del CT:', err);
+      setError('Error al cargar datos del CT. Intente de nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Función para sincronizar manualmente los datos del CT
+  const handleSyncCT = async () => {
+    try {
+      setLoading(true);
+      await syncCTFromPLC();
+      await loadCTData(); // Recargar los datos después de la sincronización
+    } catch (err) {
+      console.error('Error al sincronizar datos del CT:', err);
+      setError('Error al sincronizar datos del CT. Intente de nuevo.');
+      setLoading(false);
+    }
+  };
+  
+  // Cargar los datos inicialmente
+  useEffect(() => {
+    loadCTData();
+    
+    // Configurar actualización automática cada 10 segundos
+    const intervalId = setInterval(() => {
+      loadCTData();
+    }, 10000);
+    
+    // Limpiar el intervalo cuando el componente se desmonte
+    return () => clearInterval(intervalId);
+  }, []);
 
   return (
     <div className="flex bg-operator-gray-bg min-h-screen font-sans">
@@ -121,29 +168,55 @@ const CTDetailPage = () => {
                       alt="Carro de transferencia detallado" 
                       className="h-full object-contain relative z-0"
                     />
-                    <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow-md">
-                      Estado: Activo
+                    <div className={`absolute top-2 right-2 ${ctData?.StDefecto ? 'bg-red-500' : ctData?.StConectado ? 'bg-green-500' : 'bg-gray-500'} text-white text-xs px-2 py-1 rounded-full shadow-md`}>
+                      Estado: {ctData?.StDefecto ? 'Error' : ctData?.StConectado ? 'Activo' : 'Inactivo'}
                     </div>
+                    {loading && (
+                      <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full shadow-md animate-pulse">
+                        Actualizando...
+                      </div>
+                    )}
+                    {error && (
+                      <div className="absolute bottom-2 left-2 bg-red-500 text-white text-xs px-2 py-1 rounded-md shadow-md">
+                        {error}
+                      </div>
+                    )}
                   </div>
                   
                   <div className="ml-6 flex flex-col gap-4 w-64">
-                    {/* Tarjeta de Posición Actual */}
+                     {/* Tarjeta de Posición Actual */}
                     <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-3 pb-2 border-b border-gray-200">Posición Actual</h3>
+                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-gray-200">
+                        <h3 className="text-lg font-semibold text-gray-800">Posición Actual</h3>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleSyncCT} 
+                          disabled={loading}
+                          className="text-xs"
+                        >
+                          {loading ? 'Sincronizando...' : 'Sincronizar'}
+                        </Button>
+                      </div>
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Pasillo actual:</span>
-                          <span className="font-medium">2</span>
-                        </div>
-                        
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">Pasillo origen:</span>
-                          <span className="font-medium">1</span>
+                          <span className="font-medium">{ctData?.PasActual || '-'}</span>
                         </div>
                         
                         <div className="flex justify-between items-center">
                           <span className="text-gray-600">Pasillo destino:</span>
-                          <span className="font-medium">4</span>
+                          <span className="font-medium">{ctData?.PasDestino || '-'}</span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-600">Ciclo de trabajo:</span>
+                          <span className="font-medium">{ctData?.CicloTrabajo || '-'}</span>
+                        </div>
+                        
+                        <div className="flex justify-between items-center text-xs text-gray-500">
+                          <span>Última actualización:</span>
+                          <span>{ctData ? new Date(ctData.timestamp).toLocaleTimeString() : '-'}</span>
                         </div>
                       </div>
                     </div>
@@ -154,19 +227,36 @@ const CTDetailPage = () => {
                       <div className="space-y-3">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Modo:</span>
-                          <span className="font-medium bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Auto</span>
+                          <span className={`font-medium px-2 py-0.5 rounded ${ctData?.St_Auto ? 'bg-blue-100 text-blue-800' : ctData?.St_Semi ? 'bg-yellow-100 text-yellow-800' : ctData?.St_Manual ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-800'}`}
+                          >
+                            {ctData?.St_Auto ? 'Auto' : 
+                             ctData?.St_Semi ? 'Semi' : 
+                             ctData?.St_Manual ? 'Manual' : 'Desconocido'}
+                          </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Velocidad:</span>
-                          <span className="font-medium">1.2 m/s</span>
+                          <span className="text-gray-600">Conectado:</span>
+                          <span className="font-medium">{ctData?.StConectado ? 'Sí' : 'No'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Batería:</span>
-                          <span className="font-medium">85%</span>
+                          <span className="text-gray-600">Defecto:</span>
+                          <span className="font-medium">{ctData?.StDefecto ? 'Sí' : 'No'}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Carga:</span>
-                          <span className="font-medium">Sí</span>
+                          <span className="text-gray-600">Puerta:</span>
+                          <span className="font-medium">{ctData?.St_Puerta ? 'Abierta' : 'Cerrada'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Datos:</span>
+                          <span className="font-medium">{ctData?.St_Datos ? 'OK' : 'Error'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Material entrada:</span>
+                          <span className="font-medium">{ctData?.MatEntrada || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Material salida:</span>
+                          <span className="font-medium">{ctData?.MatSalida || 0}</span>
                         </div>
                       </div>
                     </div>
