@@ -1,34 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import SidebarOperator from "./SidebarOperator";
 import HeaderOperator from "./HeaderOperator";
-import { Home, Eye, AlertTriangle, Clock, Settings, Filter, Search, Bell, CheckCircle } from "lucide-react";
+import { Home, Eye, AlertTriangle, Clock, Settings, Filter, Search, Bell, CheckCircle, RefreshCw, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Badge } from "./ui/badge";
 
-// Tipo para las alarmas
+// Importamos el servicio de alarmas y sus tipos
+import { fetchAllActiveAlarms, fetchAlarmsHistory, syncAllAlarms, acknowledgeAlarm, resolveAlarm, SystemAlarm } from '../services/alarmsService';
+
+// Tipo para las alarmas adaptado al formato de la página
 interface Alarma {
   id: string;
   componente: string;
   titulo: string;
   descripcion: string;
-  timestamp: string;
+  timestamp: Date;
   tipo: 'error' | 'warning' | 'info' | 'success';
   estado: 'activa' | 'reconocida' | 'resuelta';
+  originalAlarm?: SystemAlarm; // Referencia a la alarma original del sistema
 }
 
-// Datos de ejemplo para las alarmas
-const alarmasEjemplo: Alarma[] = [
+// Función para convertir las alarmas del sistema al formato de la página
+const convertSystemAlarmToAlarma = (systemAlarm: SystemAlarm): Alarma => {
+  // Determinar el tipo según la severidad
+  let tipo: 'error' | 'warning' | 'info' | 'success' = 'info';
+  switch (systemAlarm.severity) {
+    case 'critical':
+      tipo = 'error';
+      break;
+    case 'warning':
+      tipo = 'warning';
+      break;
+    case 'info':
+      tipo = 'info';
+      break;
+  }
+
+  // Determinar el estado según si está reconocida o no
+  const estado: 'activa' | 'reconocida' | 'resuelta' = systemAlarm.acknowledged ? 'reconocida' : 'activa';
+
+  return {
+    id: systemAlarm.id,
+    componente: systemAlarm.component || systemAlarm.deviceName,
+    titulo: systemAlarm.message,
+    descripcion: `Alarma en ${systemAlarm.deviceName} (${systemAlarm.deviceId})`,
+    timestamp: systemAlarm.timestamp,
+    tipo,
+    estado,
+    originalAlarm: systemAlarm
+  };
+};
+
+// Datos iniciales vacíos para las alarmas
+const alarmasIniciales: Alarma[] = [
   {
     id: 'alm-001',
     componente: 'Transelevador T1',
     titulo: 'Error de posicionamiento',
     descripcion: 'El transelevador T1 ha reportado un error en el posicionamiento vertical.',
-    timestamp: '2025-05-03T14:35:23',
+    timestamp: new Date('2025-05-03T14:35:23'),
     tipo: 'error',
     estado: 'activa'
   },
@@ -37,7 +72,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Transelevador T2',
     titulo: 'Mantenimiento preventivo',
     descripcion: 'Se requiere mantenimiento programado del sistema de posicionamiento.',
-    timestamp: '2025-05-03T13:50:10',
+    timestamp: new Date('2025-05-03T13:50:10'),
     tipo: 'warning',
     estado: 'reconocida'
   },
@@ -46,7 +81,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Puente',
     titulo: 'Error de comunicación',
     descripcion: 'El puente ha reportado un error en la comunicación con el PLC.',
-    timestamp: '2025-05-03T13:30:45',
+    timestamp: new Date('2025-05-03T13:30:45'),
     tipo: 'error',
     estado: 'activa'
   },
@@ -55,7 +90,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Carro de Transferencia',
     titulo: 'Batería baja',
     descripcion: 'El carro de transferencia ha reportado un nivel bajo de batería.',
-    timestamp: '2025-05-03T12:45:32',
+    timestamp: new Date('2025-05-03T12:45:32'),
     tipo: 'warning',
     estado: 'activa'
   },
@@ -64,7 +99,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Elevador',
     titulo: 'Sobrecarga detectada',
     descripcion: 'El elevador ha detectado una sobrecarga en la plataforma.',
-    timestamp: '2025-05-03T12:15:18',
+    timestamp: new Date('2025-05-03T12:15:18'),
     tipo: 'error',
     estado: 'reconocida'
   },
@@ -73,7 +108,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Transelevador T1',
     titulo: 'Ciclo completado',
     descripcion: 'El transelevador T1 ha completado el ciclo de transporte #2145.',
-    timestamp: '2025-05-03T11:45:45',
+    timestamp: new Date('2025-05-03T11:45:45'),
     tipo: 'success',
     estado: 'resuelta'
   },
@@ -82,7 +117,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Sistema',
     titulo: 'Actualización de firmware',
     descripcion: 'Nueva actualización de firmware disponible para el sistema de control.',
-    timestamp: '2025-05-03T11:20:32',
+    timestamp: new Date('2025-05-03T11:20:32'),
     tipo: 'info',
     estado: 'reconocida'
   },
@@ -91,7 +126,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Puente',
     titulo: 'Ciclo completado',
     descripcion: 'El puente ha completado el ciclo de transporte #1876.',
-    timestamp: '2025-05-03T10:55:45',
+    timestamp: new Date('2025-05-03T10:55:45'),
     tipo: 'success',
     estado: 'resuelta'
   },
@@ -100,7 +135,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Carro de Transferencia',
     titulo: 'Mantenimiento completado',
     descripcion: 'Se ha completado el mantenimiento preventivo del carro de transferencia.',
-    timestamp: '2025-05-03T10:30:22',
+    timestamp: new Date('2025-05-03T10:30:22'),
     tipo: 'info',
     estado: 'resuelta'
   },
@@ -109,7 +144,7 @@ const alarmasEjemplo: Alarma[] = [
     componente: 'Elevador',
     titulo: 'Ciclo completado',
     descripcion: 'El elevador ha completado el ciclo de elevación #1245.',
-    timestamp: '2025-05-03T10:05:45',
+    timestamp: new Date('2025-05-03T10:05:45'),
     tipo: 'success',
     estado: 'resuelta'
   }
@@ -120,10 +155,107 @@ const AlarmasPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroComponente, setFiltroComponente] = useState('todos');
   const [filtroTipo, setFiltroTipo] = useState('todos');
+  const [alarmas, setAlarmas] = useState<Alarma[]>(alarmasIniciales);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const navigate = useNavigate();
 
+  // Cargar las alarmas al montar el componente
+  useEffect(() => {
+    loadAlarms();
+    
+    // Configurar intervalo para actualizar las alarmas cada 30 segundos
+    const interval = setInterval(() => {
+      loadAlarms();
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Función para cargar las alarmas
+  const loadAlarms = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Cargando alarmas del sistema...');
+      const systemAlarms = await fetchAllActiveAlarms();
+      
+      // Convertir las alarmas del sistema al formato de la página
+      const convertedAlarms = systemAlarms.map(convertSystemAlarmToAlarma);
+      
+      setAlarmas(convertedAlarms);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error('Error al cargar alarmas:', err);
+      setError('Error al cargar las alarmas del sistema');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Función para sincronizar manualmente las alarmas
+  const handleSyncAlarms = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Sincronizando alarmas del sistema...');
+      const success = await syncAllAlarms();
+      
+      if (success) {
+        // Recargar las alarmas después de la sincronización
+        await loadAlarms();
+      } else {
+        setError('Error al sincronizar las alarmas');
+      }
+    } catch (err) {
+      console.error('Error al sincronizar alarmas:', err);
+      setError('Error al sincronizar las alarmas');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Función para reconocer una alarma
+  const handleAcknowledgeAlarm = async (id: string) => {
+    try {
+      const success = await acknowledgeAlarm(id);
+      if (success) {
+        // Actualizar el estado de la alarma localmente
+        setAlarmas(prev => 
+          prev.map(alarma => 
+            alarma.id === id ? { ...alarma, estado: 'reconocida' } : alarma
+          )
+        );
+      }
+    } catch (err) {
+      console.error(`Error al reconocer alarma ${id}:`, err);
+      setError('Error al reconocer la alarma');
+    }
+  };
+
+  // Función para resolver una alarma
+  const handleResolveAlarm = async (id: string) => {
+    try {
+      const success = await resolveAlarm(id);
+      if (success) {
+        // Actualizar el estado de la alarma localmente
+        setAlarmas(prev => 
+          prev.map(alarma => 
+            alarma.id === id ? { ...alarma, estado: 'resuelta' } : alarma
+          )
+        );
+      }
+    } catch (err) {
+      console.error(`Error al resolver alarma ${id}:`, err);
+      setError('Error al resolver la alarma');
+    }
+  };
+
   // Filtrar alarmas según los criterios seleccionados
-  const alarmasFiltradas = alarmasEjemplo.filter(alarma => {
+  const alarmasFiltradas = alarmas.filter(alarma => {
     // Filtro por pestaña (estado)
     if (activeTab !== 'todas' && alarma.estado !== activeTab) {
       return false;
@@ -241,12 +373,11 @@ const AlarmasPage = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="todos">Todos los componentes</SelectItem>
+                        <SelectItem value="Carro Transferidor">Carro Transferidor</SelectItem>
                         <SelectItem value="Transelevador T1">Transelevador T1</SelectItem>
                         <SelectItem value="Transelevador T2">Transelevador T2</SelectItem>
                         <SelectItem value="Puente">Puente</SelectItem>
-                        <SelectItem value="Carro de Transferencia">Carro de Transferencia</SelectItem>
                         <SelectItem value="Elevador">Elevador</SelectItem>
-                        <SelectItem value="Sistema">Sistema</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -264,6 +395,10 @@ const AlarmasPage = () => {
                       </SelectContent>
                     </Select>
                   </div>
+                  <Button variant="outline" size="sm" onClick={handleSyncAlarms} disabled={loading}>
+                    {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                    {loading ? 'Actualizando...' : 'Actualizar'}
+                  </Button>
                   <Button variant="outline" size="icon" onClick={() => {
                     setSearchTerm('');
                     setFiltroComponente('todos');
@@ -279,21 +414,33 @@ const AlarmasPage = () => {
                 <TabsList className="mb-4">
                   <TabsTrigger value="todas" className="relative">
                     Todas
-                    <Badge className="ml-2 bg-gray-500">{alarmasEjemplo.length}</Badge>
+                    <Badge className="ml-2 bg-gray-500">{alarmas.length}</Badge>
                   </TabsTrigger>
                   <TabsTrigger value="activa" className="relative">
                     Activas
-                    <Badge className="ml-2 bg-red-500">{alarmasEjemplo.filter(a => a.estado === 'activa').length}</Badge>
+                    <Badge className="ml-2 bg-red-500">{alarmas.filter(a => a.estado === 'activa').length}</Badge>
                   </TabsTrigger>
                   <TabsTrigger value="reconocida" className="relative">
                     Reconocidas
-                    <Badge className="ml-2 bg-yellow-500">{alarmasEjemplo.filter(a => a.estado === 'reconocida').length}</Badge>
+                    <Badge className="ml-2 bg-yellow-500">{alarmas.filter(a => a.estado === 'reconocida').length}</Badge>
                   </TabsTrigger>
                   <TabsTrigger value="resuelta" className="relative">
                     Resueltas
-                    <Badge className="ml-2 bg-green-500">{alarmasEjemplo.filter(a => a.estado === 'resuelta').length}</Badge>
+                    <Badge className="ml-2 bg-green-500">{alarmas.filter(a => a.estado === 'resuelta').length}</Badge>
                   </TabsTrigger>
                 </TabsList>
+                
+                {error && (
+                  <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-md border border-red-200">
+                    {error}
+                  </div>
+                )}
+                
+                {lastUpdated && (
+                  <div className="mb-4 text-xs text-gray-500">
+                    Última actualización: {lastUpdated.toLocaleTimeString()}
+                  </div>
+                )}
                 
                 <div className="space-y-4">
                   {alarmasFiltradas.length > 0 ? (
@@ -313,18 +460,28 @@ const AlarmasPage = () => {
                             <div className="flex items-center gap-2 text-sm text-gray-500">
                               <span>{alarma.componente}</span>
                               <span>•</span>
-                              <span>{new Date(alarma.timestamp).toLocaleString()}</span>
+                              <span>{alarma.timestamp instanceof Date ? alarma.timestamp.toLocaleString() : new Date(alarma.timestamp).toLocaleString()}</span>
                             </div>
                           </div>
                           <div className="mt-3 md:mt-0 flex gap-2">
                             {alarma.estado === 'activa' && (
-                              <Button size="sm" variant="outline" className="flex items-center gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="flex items-center gap-1"
+                                onClick={() => handleAcknowledgeAlarm(alarma.id)}
+                              >
                                 <Bell className="h-4 w-4" />
                                 <span>Reconocer</span>
                               </Button>
                             )}
                             {(alarma.estado === 'activa' || alarma.estado === 'reconocida') && (
-                              <Button size="sm" variant="outline" className="flex items-center gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="flex items-center gap-1"
+                                onClick={() => handleResolveAlarm(alarma.id)}
+                              >
                                 <CheckCircle className="h-4 w-4" />
                                 <span>Resolver</span>
                               </Button>

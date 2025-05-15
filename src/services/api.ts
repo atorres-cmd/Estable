@@ -23,7 +23,15 @@ const API_URL = apiBaseUrl;
 // URL base de la API de MariaDB
 const MARIADB_API_URL = mariadbApiBaseUrl;
 
-console.log('API URLs configuradas:', { API_URL, MARIADB_API_URL });
+// URL base para las alarmas del Carro Transferidor (CT)
+// Las alarmas del CT están en el puerto 3003 (servidor MariaDB)
+const CT_ALARMS_URL = `${mariadbApiBaseUrl}/ct/alarmas`;
+console.log('URL para alarmas CT:', CT_ALARMS_URL);
+
+// Exportar las URLs para usarlas en otros componentes
+export { API_URL, MARIADB_API_URL, CT_ALARMS_URL };
+
+console.log('API URLs configuradas:', { API_URL, MARIADB_API_URL, CT_ALARMS_URL });
 
 // Interfaz para los datos del Transelevador
 export interface TranselevadorData {
@@ -45,6 +53,17 @@ export interface Alarma {
   descripcion: string;
   timestamp: string;
   tipo: 'error' | 'warning' | 'info' | 'success';
+}
+
+// Interfaz para las alarmas del Carro Transferidor (CT)
+export interface CTAlarm {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  message: string;
+  severity: 'critical' | 'warning' | 'info';
+  timestamp: Date;
+  acknowledged: boolean;
 }
 
 // Interfaz para los datos de TLV1_Status de MariaDB

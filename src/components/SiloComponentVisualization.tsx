@@ -5,6 +5,23 @@ import CustomSvgIcon from "./CustomSvgIcon";
 import { Link } from "react-router-dom";
 import { TLV1StatusData, TLV2StatusData, PTStatusData } from "../services/api";
 
+interface Alarm {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  message: string;
+  severity: "critical" | "warning" | "info";
+  timestamp: Date;
+  acknowledged: boolean;
+}
+
+interface AlarmsResponse {
+  success: boolean;
+  data: Alarm[];
+  message?: string;
+}
+import AlarmPopup from "./AlarmPopup";
+
 type ComponentStatus = "active" | "inactive" | "error" | "moving";
 
 interface SiloComponent {
@@ -29,6 +46,9 @@ interface SiloComponentVisualizationProps {
   tlv1Data?: TLV1StatusData | null;
   tlv2Data?: TLV2StatusData | null;
   ptData?: PTStatusData | null;
+  tlv1Alarmas?: AlarmsResponse;
+  showTLV1AlarmPopup?: boolean;
+  setShowTLV1AlarmPopup?: (show: boolean) => void;
 }
 
 const PASILLOS = 13; // Aumentado a 13 para incluir el pasillo P13 para el Elevador
@@ -43,6 +63,9 @@ const SiloComponentVisualization: FC<SiloComponentVisualizationProps> = ({
   tlv1Data,
   tlv2Data,
   ptData,
+  tlv1Alarmas,
+  showTLV1AlarmPopup,
+  setShowTLV1AlarmPopup,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -69,13 +92,41 @@ const SiloComponentVisualization: FC<SiloComponentVisualizationProps> = ({
         // Usar el componente CustomSvgIcon para el transelevador
         iconName = componentId === "trans1" ? "T1" : "T2";
         return (
-          <div className={`relative ${animationClass}`} style={{ width: '30px', height: '30px' }}>
-            <CustomSvgIcon 
-              name={iconName}
-              className={`${status === "moving" ? "animate-pulse" : ""}`}
-              size={30}
-              color={status === "error" ? "red" : undefined}
-            />
+          <div 
+            className={`relative ${animationClass}`} 
+            style={{ width: '30px', height: '30px' }}
+            onClick={() => componentId === "trans1" ? window.location.href = '/tlv1' : window.location.href = '/tlv2'}
+            onMouseEnter={() => componentId === "trans1" && tlv1Alarmas && tlv1Alarmas.data && tlv1Alarmas.data.length > 0 && setShowTLV1AlarmPopup && setShowTLV1AlarmPopup(true)}
+            onMouseLeave={() => componentId === "trans1" && setShowTLV1AlarmPopup && setShowTLV1AlarmPopup(false)}
+          >
+            <div className="relative">
+              <CustomSvgIcon 
+                name={iconName}
+                className={`${status === "moving" ? "animate-pulse" : ""}`}
+                size={30}
+                color={status === "error" ? "red" : undefined}
+              />
+              
+              {/* Indicador de alarmas para TLV1 */}
+              {componentId === "trans1" && tlv1Alarmas && tlv1Alarmas.data && tlv1Alarmas.data.length > 0 && (
+                <span 
+                  className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center animate-pulse"
+                  title={`${tlv1Alarmas.data.length} alarmas activas`}
+                >
+                  {tlv1Alarmas.data.length}
+                </span>
+              )}
+              
+              {/* Ventana emergente de alarmas para TLV1 */}
+              {componentId === "trans1" && showTLV1AlarmPopup && tlv1Alarmas && tlv1Alarmas.data && tlv1Alarmas.data.length > 0 && (
+                <AlarmPopup 
+                  alarms={tlv1Alarmas.data} 
+                  position="top" 
+                  maxAlarms={3} 
+                  onClose={() => setShowTLV1AlarmPopup && setShowTLV1AlarmPopup(false)}
+                />
+              )}
+            </div>
           </div>
         );
       case "transferidor":

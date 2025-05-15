@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getCTStatusFromMariaDB, syncCTFromPLC, CTStatusData } from '../services/api';
+// Importar desde el nuevo servicio ctStatusApi.ts
+import { getCTStatusFromMariaDB, CTStatusData, getCarroEstadoText, getCarroEstadoColor, syncCTFromPLC } from '../services/ctStatusApi';
+import { fetchCTActiveAlarms, syncCTAlarms } from '../services/ctAlarmsService';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -11,43 +13,15 @@ import { useNavigate } from "react-router-dom";
 // Tipo para las alarmas
 interface Alarma {
   id: string;
-  titulo: string;
-  descripcion: string;
-  timestamp: string;
-  tipo: 'error' | 'warning' | 'info' | 'success';
+  deviceId: string;
+  deviceName: string;
+  message: string;
+  severity: 'critical' | 'warning' | 'info';
+  timestamp: Date;
+  acknowledged: boolean;
 }
 
-// Datos de ejemplo para las alarmas
-const alarmasEjemplo: Alarma[] = [
-  {
-    id: 'alm-001',
-    titulo: 'Error de posicionamiento',
-    descripcion: 'El carro de transferencia ha reportado un error en el posicionamiento.',
-    timestamp: '2025-05-03T14:35:23',
-    tipo: 'error'
-  },
-  {
-    id: 'alm-002',
-    titulo: 'Mantenimiento preventivo',
-    descripcion: 'Se requiere mantenimiento preventivo del sistema de tracción.',
-    timestamp: '2025-05-03T13:50:10',
-    tipo: 'warning'
-  },
-  {
-    id: 'alm-003',
-    titulo: 'Ciclo completado',
-    descripcion: 'El carro de transferencia ha completado el ciclo de transporte #1845.',
-    timestamp: '2025-05-03T13:15:45',
-    tipo: 'success'
-  },
-  {
-    id: 'alm-004',
-    titulo: 'Actualización de firmware',
-    descripcion: 'Nueva actualización de firmware disponible para el controlador del CT.',
-    timestamp: '2025-05-03T12:40:32',
-    tipo: 'info'
-  }
-];
+
 
 const CTDetailPage = () => {
   const [activeTab, setActiveTab] = useState('general');
@@ -55,6 +29,9 @@ const CTDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [alarmas, setAlarmas] = useState<Alarma[]>([]);
+  const [loadingAlarmas, setLoadingAlarmas] = useState(true);
+  const [errorAlarmas, setErrorAlarmas] = useState<string | null>(null);
   const navigate = useNavigate();
   
   // Función para cargar los datos del CT
@@ -85,14 +62,48 @@ const CTDetailPage = () => {
       setLoading(false);
     }
   };
+
+  // Función para cargar las alarmas del CT
+  const loadCTAlarms = async () => {
+    try {
+      setLoadingAlarmas(true);
+      const response = await fetchCTActiveAlarms();
+      if (response.success && Array.isArray(response.data)) {
+        setAlarmas(response.data);
+        setErrorAlarmas(null);
+      } else {
+        setErrorAlarmas('Error al cargar las alarmas del CT');
+      }
+    } catch (err) {
+      console.error('Error al cargar alarmas del CT:', err);
+      setErrorAlarmas('Error al cargar las alarmas del CT. Intente de nuevo.');
+    } finally {
+      setLoadingAlarmas(false);
+    }
+  };
+
+  // Función para sincronizar manualmente las alarmas del CT
+  const handleSyncAlarms = async () => {
+    try {
+      setLoadingAlarmas(true);
+      await syncCTAlarms();
+      await loadCTAlarms(); // Recargar las alarmas después de la sincronización
+    } catch (err) {
+      console.error('Error al sincronizar alarmas del CT:', err);
+      setErrorAlarmas('Error al sincronizar alarmas del CT. Intente de nuevo.');
+      setLoadingAlarmas(false);
+    }
+  };
   
   // Cargar los datos inicialmente
   useEffect(() => {
     loadCTData();
+    loadCTAlarms();
     
     // Configurar actualización automática cada 10 segundos
     const intervalId = setInterval(() => {
       loadCTData();
+      loadCTAlarms();
     }, 10000);
     
     // Limpiar el intervalo cuando el componente se desmonte
@@ -268,36 +279,51 @@ const CTDetailPage = () => {
             {/* Recuadro de Alarmas */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Alarmas</CardTitle>
-                <Button variant="outline" size="sm">Ver todas</Button>
+                <CardTitle>Alarmas del Carro Transferidor</CardTitle>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleSyncAlarms}
+                  disabled={loadingAlarmas}
+                >
+                  {loadingAlarmas ? 'Sincronizando...' : 'Sincronizar'}
+                </Button>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {alarmasEjemplo.map(alarma => {
-                    let bgColor = 'bg-white border-gray-200';
-                    if (alarma.tipo === 'error') bgColor = 'bg-red-50 border-red-200';
-                    else if (alarma.tipo === 'warning') bgColor = 'bg-yellow-50 border-yellow-200';
-                    else if (alarma.tipo === 'info') bgColor = 'bg-blue-50 border-blue-200';
-                    else if (alarma.tipo === 'success') bgColor = 'bg-green-50 border-green-200';
-                    
-                    return (
-                      <div key={alarma.id} className={`p-4 border rounded-md ${bgColor}`}>
-                        <div className="flex justify-between">
-                          <div>
-                            <div className="font-medium">{alarma.titulo}</div>
-                            <div className="text-gray-600">{alarma.descripcion}</div>
-                            <div className="text-gray-500 text-sm mt-1">
-                              {new Date(alarma.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                {loadingAlarmas ? (
+                  <div className="text-center py-4">Cargando alarmas...</div>
+                ) : errorAlarmas ? (
+                  <div className="text-center py-4 text-red-500">{errorAlarmas}</div>
+                ) : alarmas.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500">No hay alarmas activas</div>
+                ) : (
+                  <div className="space-y-4">
+                    {alarmas.map(alarma => {
+                      let bgColor = 'bg-white border-gray-200';
+                      if (alarma.severity === 'critical') bgColor = 'bg-red-50 border-red-200';
+                      else if (alarma.severity === 'warning') bgColor = 'bg-yellow-50 border-yellow-200';
+                      else if (alarma.severity === 'info') bgColor = 'bg-blue-50 border-blue-200';
+                      
+                      return (
+                        <div key={alarma.id} className={`p-4 border rounded-md ${bgColor}`}>
+                          <div className="flex justify-between">
+                            <div>
+                              <div className="font-medium">{alarma.message}</div>
+                              <div className="text-gray-500 text-sm mt-1">
+                                {alarma.timestamp instanceof Date ? 
+                                  alarma.timestamp.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 
+                                  new Date(alarma.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                              </div>
                             </div>
+                            <button className="px-3 py-1 border rounded-md text-blue-500 hover:bg-blue-50 text-sm">
+                              Reconocer
+                            </button>
                           </div>
-                          <button className="px-3 py-1 border rounded-md text-blue-500 hover:bg-blue-50 text-sm">
-                            Reconocer
-                          </button>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

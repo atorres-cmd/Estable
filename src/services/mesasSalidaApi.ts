@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // URL de la API de MariaDB
-const MARIADB_API_URL = 'http://localhost:3003/api';
+const MARIADB_API_URL = 'http://localhost:3003/api/mariadb';
 
 // Interfaz para los datos de MesasSalida_Status de MariaDB
 export interface MesasSalidaStatusData {
@@ -24,7 +24,8 @@ export interface MesasSalidaStatusData {
 // Función para obtener los datos de las Mesas de Salida desde MariaDB
 export const getMesasSalidaStatusFromMariaDB = async (): Promise<MesasSalidaStatusData> => {
   try {
-    const response = await axios.get(`${MARIADB_API_URL}/mariadb/mesasSalida/status`);
+    // Ruta actualizada para obtener los datos de las mesas de salida
+    const response = await axios.get(`${MARIADB_API_URL}/db110/mesasSalida/status`);
     console.log('Datos de las Mesas de Salida desde MariaDB:', response.data);
     return response.data;
   } catch (error) {

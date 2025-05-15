@@ -12,7 +12,8 @@ import {
   Footprints,
   History,
   ArrowUpDown,
-  Settings
+  Settings,
+  Database
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -77,6 +78,11 @@ const menuItems = [
     label: "ELEVADOR",
     icon: ArrowUpDown,
   },
+  {
+    id: "db111",
+    label: "DB111",
+    icon: Database,
+  },
 ];
 
 const SidebarOperator = () => {
@@ -103,6 +109,8 @@ const SidebarOperator = () => {
       navigate("/elevador");
     } else if (id === "alarmas") {
       navigate("/alarmas");
+    } else if (id === "db111") {
+      navigate("/db111");
     } else if (id === "home") {
       navigate("/");
     }

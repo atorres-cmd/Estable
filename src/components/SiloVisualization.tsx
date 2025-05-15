@@ -1,13 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from 'react';
 import { Truck } from "lucide-react";
 import SiloComponentInfoGroup from "./SiloComponentInfoGroup";
 import SiloComponentLegend from "./SiloComponentLegend";
 import SiloComponentVisualization from "./SiloComponentVisualization";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { getCTAlarmasFromMariaDB, CTAlarmasData } from '../services/ctAlarmasApi';
+import AlarmPopup from './AlarmPopup';
 import { useNavigate } from "react-router-dom";
-import { getTLV1StatusFromMariaDB, getTLV2StatusFromMariaDB, getPTStatusFromMariaDB, getCTStatusFromMariaDB, TLV1StatusData, TLV2StatusData, PTStatusData, CTStatusData } from '../services/api';
+import { getTLV1StatusFromMariaDB, getTLV2StatusFromMariaDB, getPTStatusFromMariaDB, TLV1StatusData, TLV2StatusData, PTStatusData } from '../services/api';
+import { getCTStatusFromMariaDB, CTStatusData } from '../services/ctStatusApi';
 import { getMesasEntradaStatusFromMariaDB, MesasEntradaStatusData } from '../services/mesasEntradaApi';
 import { getMesasSalidaStatusFromMariaDB, MesasSalidaStatusData } from '../services/mesasSalidaApi';
+import { MARIADB_API_URL } from '../services/api';
+import axios from 'axios';
 
 // Tipos para los componentes del silo
 type ComponentStatus = "active" | "inactive" | "error" | "moving";
@@ -23,6 +28,22 @@ interface SiloComponent {
     z?: number;          // Palas (1 o 2 solo para traslo)
     pasillo?: number;    // solo transferidor
   };
+}
+
+interface Alarm {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  message: string;
+  severity: "critical" | "warning" | "info";
+  timestamp: Date;
+  acknowledged: boolean;
+}
+
+interface AlarmsResponse {
+  success: boolean;
+  data: Alarm[];
+  message?: string;
 }
 
 const SILO_PASILLOS = 13; // Aumentado a 13 para incluir el pasillo P13 para el Elevador
@@ -46,6 +67,10 @@ const SiloVisualization = () => {
   const [tlv1Data, setTLV1Data] = useState<TLV1StatusData | null>(null);
   const [tlv2Data, setTLV2Data] = useState<TLV2StatusData | null>(null);
   const [ptData, setPTData] = useState<PTStatusData | null>(null);
+  const [ctAlarmas, setCTAlarmas] = useState<AlarmsResponse | null>(null);
+  const [tlv1Alarmas, setTLV1Alarmas] = useState<AlarmsResponse | null>(null);
+  const [showCTAlarmPopup, setShowCTAlarmPopup] = useState<boolean>(false);
+  const [showTLV1AlarmPopup, setShowTLV1AlarmPopup] = useState<boolean>(false);
   const [ctData, setCTData] = useState<CTStatusData | null>(null);
   const [mesasEntradaData, setMesasEntradaData] = useState<MesasEntradaStatusData | null>(null);
   const [mesasSalidaData, setMesasSalidaData] = useState<MesasSalidaStatusData | null>(null);
@@ -57,29 +82,108 @@ const SiloVisualization = () => {
   const lastT2UpdateTime = useRef(0);
   const t2UpdateInterval = 1000; // Actualizar T2 como máximo una vez por segundo
 
+  // Función para obtener las alarmas del TLV1
+  const getTLV1AlarmasFromMariaDB = async () => {
+    try {
+      const response = await axios.get(`${MARIADB_API_URL}/tlv1/alarmas/active`);
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener alarmas del TLV1:', error);
+      return { success: false, data: [] };
+    }
+  };
+
+  // Función segura para obtener datos que maneja errores individualmente
+  const safeDataFetch = async (fetchFunction, errorMessage, defaultValue) => {
+    try {
+      return await fetchFunction();
+    } catch (error) {
+      console.error(errorMessage, error);
+      return defaultValue;
+    }
+  };
+
   // Cargar datos de TLV1, TLV2, PT, Mesas de Entrada y Mesas de Salida desde MariaDB
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Obtener datos de TLV1, TLV2, PT, CT, Mesas de Entrada y Mesas de Salida en paralelo
-        const [tlv1Result, tlv2Result, ptResult, ctResult, mesasEntradaResult, mesasSalidaResult] = await Promise.all([
-          getTLV1StatusFromMariaDB(),
-          getTLV2StatusFromMariaDB(),
-          getPTStatusFromMariaDB(),
-          getCTStatusFromMariaDB(),
-          getMesasEntradaStatusFromMariaDB(),
-          getMesasSalidaStatusFromMariaDB()
-        ]);
         
-        setTLV1Data(tlv1Result);
-        setTLV2Data(tlv2Result);
-        setPTData(ptResult);
-        setCTData(ctResult);
-        setMesasEntradaData(mesasEntradaResult);
-        setMesasSalidaData(mesasSalidaResult);
+        // Obtener datos de manera segura, manejando errores individualmente
+        const tlv1Result = await safeDataFetch(
+          getTLV1StatusFromMariaDB, 
+          'Error al obtener datos del TLV1:', 
+          null
+        );
+        
+        const tlv2Result = await safeDataFetch(
+          getTLV2StatusFromMariaDB, 
+          'Error al obtener datos del TLV2:', 
+          null
+        );
+        
+        const ptResult = await safeDataFetch(
+          getPTStatusFromMariaDB, 
+          'Error al obtener datos del PT:', 
+          null
+        );
+        
+        const ctResult = await safeDataFetch(
+          getCTStatusFromMariaDB, 
+          'Error al obtener datos del CT:', 
+          null
+        );
+        
+        const mesasEntradaResult = await safeDataFetch(
+          getMesasEntradaStatusFromMariaDB, 
+          'Error al obtener datos de mesas de entrada:', 
+          null
+        );
+        
+        const mesasSalidaResult = await safeDataFetch(
+          getMesasSalidaStatusFromMariaDB, 
+          'Error al obtener datos de mesas de salida:', 
+          null
+        );
+        
+        const ctAlarmasResult = await safeDataFetch(
+          getCTAlarmasFromMariaDB, 
+          'Error al obtener alarmas del CT:', 
+          { success: false, data: [] }
+        );
+        
+        const tlv1AlarmasResult = await safeDataFetch(
+          getTLV1AlarmasFromMariaDB, 
+          'Error al obtener alarmas del TLV1:', 
+          { success: false, data: [] }
+        );
+        
+        // Actualizar estados solo si los componentes están montados
+        if (tlv1Result) setTLV1Data(tlv1Result);
+        if (tlv2Result) setTLV2Data(tlv2Result);
+        if (ptResult) setPTData(ptResult);
+        if (ctResult) setCTData(ctResult);
+        if (mesasEntradaResult) setMesasEntradaData(mesasEntradaResult);
+        if (mesasSalidaResult) setMesasSalidaData(mesasSalidaResult);
+        if (ctAlarmasResult) setCTAlarmas(ctAlarmasResult);
+        if (tlv1AlarmasResult) setTLV1Alarmas(tlv1AlarmasResult);
+        
         setLoading(false);
         setError(null);
+        
+        // Mostrar el popup de alarmas del CT si hay alarmas activas
+        if (ctAlarmasResult && ctAlarmasResult.success && ctAlarmasResult.data.length > 0) {
+          setShowCTAlarmPopup(true);
+        } else {
+          setShowCTAlarmPopup(false);
+        }
+        
+        // Mostrar el popup de alarmas del TLV1 si hay alarmas activas
+        if (tlv1AlarmasResult && tlv1AlarmasResult.success && tlv1AlarmasResult.data.length > 0) {
+          setShowTLV1AlarmPopup(true);
+        } else {
+          setShowTLV1AlarmPopup(false);
+        }
         
         console.log('Datos del Puente Transferidor:', ptResult);
         console.log('Datos del Carro Transferidor:', ctResult);
@@ -175,7 +279,7 @@ const SiloVisualization = () => {
     
     // Limpiar intervalo al desmontar el componente
     return () => clearInterval(intervalId);
-  }, []); // Se ejecuta solo al montar el componente
+  }, [ptData]); // Incluimos ptData como dependencia para actualizar los componentes cuando cambie
   
   // Referencia para almacenar la última posición válida del puente
   const lastValidPuentePosition = useRef(1); // Inicializamos con 1 como valor por defecto
@@ -469,6 +573,9 @@ const SiloVisualization = () => {
             tlv1Data={tlv1Data}
             tlv2Data={tlv2Data}
             ptData={ptData}
+            tlv1Alarmas={tlv1Alarmas}
+            showTLV1AlarmPopup={showTLV1AlarmPopup}
+            setShowTLV1AlarmPopup={setShowTLV1AlarmPopup}
           />
           
           {/* Área inferior con etiquetas de pasillos, transportadores y carro transferidor */}
@@ -552,7 +659,7 @@ const SiloVisualization = () => {
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div 
-                          className="absolute cursor-pointer hover:scale-110 transition-transform" 
+                          className="cursor-pointer hover:scale-110 transition-transform" 
                           style={{ 
                             position: 'absolute', 
                             left: `${xPerc}%`, 
@@ -561,6 +668,8 @@ const SiloVisualization = () => {
                             zIndex: 20
                           }}
                           onClick={() => navigate('/ct')}
+                          onMouseEnter={() => ctAlarmas && ctAlarmas.data.length > 0 && setShowCTAlarmPopup(true)}
+                          onMouseLeave={() => setShowCTAlarmPopup(false)}
                         >
                           <div className="relative">
                             <div className={`relative ${statusColor}`} style={{ width: '30px', height: '30px' }}>
@@ -587,7 +696,28 @@ const SiloVisualization = () => {
                                 <rect x="70" y="17" width="10" height="6" fill="#88CCFF" stroke="#000000" strokeWidth="0.5" /> {/* Ventana */}
                               </svg>
                             </div>
+                            {/* Indicador de estado */}
                             <span className="absolute -bottom-2 -right-3 w-3 h-3 rounded-full border border-white shadow-sm bg-green-500" />
+                            
+                            {/* Indicador de alarmas */}
+                            {ctAlarmas && ctAlarmas.data.length > 0 && (
+                              <span 
+                                className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center animate-pulse"
+                                title={`${ctAlarmas.data.length} alarmas activas`}
+                              >
+                                {ctAlarmas.data.length}
+                              </span>
+                            )}
+                            
+                            {/* Ventana emergente de alarmas */}
+                            {showCTAlarmPopup && ctAlarmas && ctAlarmas.data.length > 0 && (
+                              <AlarmPopup 
+                                alarms={ctAlarmas.data} 
+                                position="top" 
+                                maxAlarms={3} 
+                                onClose={() => setShowCTAlarmPopup(false)}
+                              />
+                            )}
                           </div>
                           <span className="text-xs font-semibold text-gray-700 bg-white/80 rounded px-1 mt-1 shadow-sm hover:bg-gray-200">CT</span>
                         </div>

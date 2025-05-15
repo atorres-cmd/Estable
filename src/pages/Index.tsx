@@ -21,10 +21,10 @@ const Index = () => {
               <SiloVisualization />
             </div>
             <div className="lg:col-span-2">
-              <PasillosStatusCard />
-            </div>
-            <div>
               <AlarmPanel />
+            </div>
+            <div className="lg:col-span-2">
+              <PasillosStatusCard />
             </div>
             <div className="lg:col-span-2">
               <TableKPI />

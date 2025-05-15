@@ -14,6 +14,7 @@ import AlarmasPage from "./components/AlarmasPage";
 import ControlTLV1Page from "./components/ControlTLV1Page";
 import ControlTLV2Page from "./components/ControlTLV2Page";
 import TestPage from "./pages/TestPage";
+import DB111Page from "./pages/DB111Page";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/control/tlv1" element={<ControlTLV1Page />} />
           <Route path="/control/tlv2" element={<ControlTLV2Page />} />
           <Route path="/test" element={<TestPage />} />
+          <Route path="/db111" element={<DB111Page />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
